@@ -2,60 +2,59 @@ package com.onursedef.salepos;
 
 import androidx.appcompat.app.AppCompatActivity;
 
-import android.content.Intent;
+import android.os.AsyncTask;
 import android.os.Bundle;
-import android.util.Log;
 
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.net.URI;
-
-import io.socket.client.IO;
-import io.socket.client.Socket;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.Socket;
 
 public class WaitingForResponse extends AppCompatActivity {
 
-    URI wsUri = URI.create("http://192.168.1.8:3000");
-    Socket mSocket = IO.socket(wsUri);
+    Socket socket;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.waiting_for_response);
 
-        mSocket.connect();
+        new ConnectTask().execute();
 
-        mSocket.on(Socket.EVENT_CONNECT, args -> {
-            Log.i("websocket", "client connected");
-        });
+        String productName = getIntent().getStringExtra("name");
+        String productPrice = getIntent().getStringExtra("price");
+        String productCode = getIntent().getStringExtra("code");
 
-        mSocket.on(Socket.EVENT_CONNECT_ERROR, args -> {
-            Log.e("websocket", "couldn't connect");
-        });
 
-        mSocket.on("message", args -> {
-            Log.i("websocket", args[0].toString());
-            String message = args[0].toString();
+        String respJson = "{\"type\": \"BANK_APPROVE_PENDING\", \"name\": \"" + productName + "\",\"price\": " + productPrice + ", \"code\": \"" + productCode + "\"}";
+
+        new SendTask().execute(respJson);
+    }
+
+    class ConnectTask extends AsyncTask<Void, Void, Void> {
+        @Override
+        protected Void doInBackground(Void... voids) {
             try {
-                JSONObject json = new JSONObject(message);
-                String type = json.getString("type");
-                if (type.equals("CONN_START")) {
-                    Log.i("wsCon", "true");
-                }
-
-                if (type.equals("BANK_APPROVED") || type.equals("QRCODE_APPROVED"))  {
-                    Intent intent = new Intent(WaitingForResponse.this, Success.class);
-                    startActivity(intent);
-                }
-
-                if (type.equals("BANK_DECLINED") || type.equals("QRCODE_DECLINED")) {
-                    Intent intent = new Intent(WaitingForResponse.this, Failure.class);
-                    startActivity(intent);
-                }
-            } catch (JSONException e) {
+                socket = new Socket("192.168.1.8", 8000);
+            } catch (IOException e) {
                 e.printStackTrace();
             }
-        });
+            return null;
+        }
+    }
+
+    class SendTask extends AsyncTask<String, Void, Void> {
+        @Override
+        protected Void doInBackground(String... messages) {
+            try {
+                OutputStream outputStream = socket.getOutputStream();
+                outputStream.write(messages[0].getBytes());
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            return null;
+        }
     }
 }
